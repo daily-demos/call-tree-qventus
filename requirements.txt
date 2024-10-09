@@ -1,0 +1,5 @@
+fastapi[standard]
+pytz
+python-dotenv
+aiohttp
+python-statemachine[diagrams]
