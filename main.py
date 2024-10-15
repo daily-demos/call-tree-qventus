@@ -4,6 +4,7 @@ import uuid
 from typing import Annotated
 
 import aiohttp
+import modal
 import pytz
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header
@@ -14,6 +15,13 @@ from call_tree import CallTree
 
 load_dotenv(override=True)
 
+modal_app = modal.App("phone-tree")
+image = (
+    modal.Image.debian_slim()
+    .pip_install("boto3")
+    .pip_install_from_requirements("requirements.txt")
+)
+
 
 class FunctionCallRequest(BaseModel):
     function_name: str
@@ -21,11 +29,12 @@ class FunctionCallRequest(BaseModel):
     arguments: dict
 
 
-class DialinRequest(BaseModel):
+class StartRequest(BaseModel):
     From: str = None
     To: str = None
     callId: str = None
     callDomain: str = None
+    dialout: str = None
 
 
 class LanguageRequest(BaseModel):
@@ -34,8 +43,6 @@ class LanguageRequest(BaseModel):
 
 app = FastAPI()
 load_dotenv(override=True)
-
-tz = pytz.timezone("America/Los_Angeles")
 
 languages = {
     "english": {
@@ -67,31 +74,9 @@ languages = {
 call_trees = {}
 
 
-async def stub(function_name, tool_call_id, arguments):
-    events = [
-        {
-            "action": {
-                "service": "llm",
-                "action": "function_result",
-                "arguments": [
-                    {"name": "function_name", "value": function_name},
-                    {"name": "tool_call_id", "value": tool_call_id},
-                    {"name": "arguments", "value": arguments},
-                    {
-                        "name": "result",
-                        "value": {"ok": "ok"},
-                    },
-                ],
-            }
-        },
-    ]
-    for e in events:
-        for k, v in e.items():
-            yield f"event: {k}\ndata: {json.dumps(v)}\n\n"
-    yield "data:close\n\n"
-
-
 async def language_changer(function_name, tool_call_id, arguments):
+    """If the LLM calls the change_language function, this function sends RTVI message to change the TTS and STT languages."""
+
     lang = languages[arguments["language"]]
     events = [
         {
@@ -137,10 +122,22 @@ async def language_changer(function_name, tool_call_id, arguments):
     yield "data:close\n\n"
 
 
+async def response_streamer(messages, function_name, tool_call_id, arguments):
+    """Takes an array of RTVI messages and formats them as server-sent events."""
+
+    for m in messages:
+        print(f"!!! m is: {m}")
+        for k, v in m.items():
+            yield f"event: {k}\ndata: {json.dumps(v)}\n\n"
+    yield "data:close\n\n"
+
+
 # If you want to also use this webhook server for a dial-in bot, you can use the
 # /start action here.
 @app.post("/start")
-async def start(req: DialinRequest):
+async def start(req: StartRequest):
+    """POST to this endpoint to start a Daily Bots session."""
+
     async with aiohttp.ClientSession() as session:
         conversation_id = str(uuid.uuid4())
         bot_config = {
@@ -165,9 +162,17 @@ async def start(req: DialinRequest):
             "config": [
                 {
                     "service": "tts",
-                    "options": [{"name": "voice", "value": "829ccd10-f8b3-43cd-b8a0-4aeaa81f3b30"}],
+                    "options": [
+                        {
+                            "name": "voice",
+                            "value": "829ccd10-f8b3-43cd-b8a0-4aeaa81f3b30",
+                        }
+                    ],
                 },
-                {"service": "stt", "options": [{"name": "model", "value": "nova-2-general"}]},
+                {
+                    "service": "stt",
+                    "options": [{"name": "model", "value": "nova-2-general"}],
+                },
                 {
                     "service": "llm",
                     "options": [
@@ -240,23 +245,6 @@ async def start(req: DialinRequest):
                                         },
                                     },
                                 },
-                                # {
-                                #     "type": "function",
-                                #     "function": {
-                                #         "name": "why_calling",
-                                #         "description": "Call this function if the person you're talking to asks why you're calling.",
-                                #         "parameters": {
-                                #             "type": "object",
-                                #             "properties": {
-                                #                 "name": {
-                                #                     "type": "string",
-                                #                     "description": "The name of the person you're trying to speak with.",
-                                #                 },
-                                #             },
-                                #             "required": ["name"],
-                                #         },
-                                #     },
-                                # },
                             ],
                         },
                         {"name": "run_on_config", "value": True},
@@ -266,11 +254,17 @@ async def start(req: DialinRequest):
         }
         call_trees[conversation_id] = CallTree("Chad Bailey", "Bob's Barber Academy")
         if req.callId:
-            bot_config["dialin_settings"] = {"callId": req.callId, "callDomain": req.callDomain}
-
+            bot_config["dialin_settings"] = {
+                "callId": req.callId,
+                "callDomain": req.callDomain,
+            }
+        if req.dialout:
+            bot_config["dialout_settings"] = [{"phoneNumber": req.dialout}]
         headers = {"Authorization": f"Bearer {os.getenv('DAILY_API_KEY')}"}
         response_data = {}
-        r = await session.post("http://localhost:7860", headers=headers, json=bot_config)
+        r = await session.post(
+            "http://localhost:7860", headers=headers, json=bot_config
+        )
         if r.status != 200:
             text = await r.text()
             raise Exception(f"Problem starting a bot worker: {text}")
@@ -282,6 +276,8 @@ async def start(req: DialinRequest):
 
 @app.post("/language")
 async def set_language(req: FunctionCallRequest):
+    """The LLM will POST a webhook to this endpoint if it calls the change_lanugage function."""
+
     print("Language request received: req")
     return StreamingResponse(
         language_changer(req.function_name, req.tool_call_id, req.arguments),
@@ -289,37 +285,12 @@ async def set_language(req: FunctionCallRequest):
     )
 
 
-async def response_streamer(messages, function_name, tool_call_id, arguments):
-    tmp = (
-        {
-            "action": {
-                "service": "llm",
-                "action": "function_result",
-                "arguments": [
-                    {"name": "function_name", "value": function_name},
-                    {"name": "tool_call_id", "value": tool_call_id},
-                    {"name": "arguments", "value": arguments},
-                    {
-                        "name": "result",
-                        "value": {"ok": "ok"},
-                    },
-                ],
-            }
-        },
-    )
-
-    # actions.insert(0, tmp)
-    for m in messages:
-        print(f"!!! m is: {m}")
-        for k, v in m.items():
-            yield f"event: {k}\ndata: {json.dumps(v)}\n\n"
-    yield "data:close\n\n"
-
-
 @app.post("/webhook")
 async def webhook(
     req: FunctionCallRequest, conversation_id: Annotated[str | None, Header()] = None
 ):
+    """This is the webhook endpoint used for calling all the call tree functions."""
+
     print(f"!!! got a webhook function call: {req}, conversation_id: {conversation_id}")
     ct = call_trees[conversation_id]
     # we'll eventually dispatch the actual webhook function_name to the state machine.
@@ -331,7 +302,9 @@ async def webhook(
     print(f"!!! machine state: {ct.current_state.name}")
     print(f"!!! messages: {ct.messages}")
     return StreamingResponse(
-        response_streamer(ct.messages, req.function_name, req.tool_call_id, req.arguments),
+        response_streamer(
+            ct.messages, req.function_name, req.tool_call_id, req.arguments
+        ),
         media_type="text/event-stream",
     )
 
@@ -339,3 +312,9 @@ async def webhook(
 @app.get("/")
 def homepage():
     return {"hello": "world"}
+
+
+@modal_app.function(image=image)
+@modal.asgi_app()
+def fastapi_app():
+    return app
