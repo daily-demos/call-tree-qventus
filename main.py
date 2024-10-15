@@ -140,6 +140,9 @@ async def start(req: StartRequest):
 
     async with aiohttp.ClientSession() as session:
         conversation_id = str(uuid.uuid4())
+        run_on_config = True
+        if req.dialout:
+            run_on_config = False
         bot_config = {
             "bot_profile": "voice_2024_08",
             "max_duration": "300",
@@ -247,7 +250,7 @@ async def start(req: StartRequest):
                                 },
                             ],
                         },
-                        {"name": "run_on_config", "value": True},
+                        {"name": "run_on_config", "value": run_on_config},
                     ],
                 },
             ],

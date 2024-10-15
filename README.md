@@ -37,3 +37,13 @@ cp env.example .env
 7. Follow [this guide](https://docs.daily.co/guides/products/dial-in-dial-out/dialin-pinless#provisioning-sip-interconnect-and-pinless-dialin-workflow) to enable dial-in for your domain. For the `room_creation_api` property, point at your ngrok hostname: `"room_creation_api": "https://your domain.ngrok.app"`.
 
 Dial your purchased phone number. You should hear hold music for 1-2 seconds and see activity in your terminal windows, then the phone should ring once, and the bot should start talking to you!
+
+To dial out from your bot to a phone number, send a POST request to your local server with a `dialout` number, like this:
+
+```
+curl -X "POST" "http://localhost:8000/start" \
+	 -H 'Content-Type: application/json; charset=utf-8' \
+	 -d $'{
+  "dialout": "+12225551212"
+}'
+```
