@@ -275,6 +275,7 @@ async def start(req: StartRequest):
             raise Exception(f"Problem starting a bot worker: {text}")
 
         response_data = await r.json()
+        print(f"Bot config: {bot_config}")
         print(f"Room to join: {response_data['room_url']}?t={response_data['token']}")
         return response_data
 
