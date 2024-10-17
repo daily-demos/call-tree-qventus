@@ -30,7 +30,7 @@ cp env.example .env
 
 4. Run the server: `uvicorn main:app --reload`.
 
-5. Install [ngrok](https://ngrok.com/) so your local server can receive webhooks from Daily's servers. Start ngrok running in a terminal window with a command like `ngrok http --domain yourdomain.ngrok.app 8000`.
+5. Install [ngrok](https://ngrok.com/) so your local server can receive webhooks from Daily's servers. Start ngrok running in a terminal window with a command like `ngrok http --domain yourdomain.ngrok.app 8000`. Add your ngrok hostname to your .env file.
 
 6. Use your Daily API key to [buy a phone number](https://docs.daily.co/reference/rest-api/phone-numbers/buy-phone-number).
 

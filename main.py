@@ -1,7 +1,7 @@
 import json
 import os
 import uuid
-from typing import Annotated
+from typing import Annotated, Optional
 
 import aiohttp
 import modal
@@ -17,7 +17,7 @@ load_dotenv(override=True)
 
 modal_app = modal.App("phone-tree")
 image = (
-    modal.Image.debian_slim()
+    modal.Image.debian_slim(python_version="3.11")
     .pip_install("boto3")
     .pip_install_from_requirements("requirements.txt")
 )
@@ -144,19 +144,19 @@ async def start(req: StartRequest):
         if req.dialout:
             run_on_config = False
         bot_config = {
-            "bot_profile": "voice_2024_08",
+            "bot_profile": "voice_2024_10",
             "max_duration": "300",
             "services": {"tts": "cartesia", "llm": "openai"},
             "api_keys": {"openai": os.getenv("OPENAI_API_KEY", None)},
             "webhook_tools": {
                 "change_language": {
-                    "url": "http://127.0.0.1:8000/language",
+                    "url": f"{os.getenv('WEBHOOK_HOST', 'http://localhost:8000')}/language",
                     "method": "POST",
                     "streaming": True,
                     "custom_headers": {"conversation-id": conversation_id},
                 },
                 "*": {
-                    "url": "http://127.0.0.1:8000/webhook",
+                    "url": f"{os.getenv('WEBHOOK_HOST', 'http://localhost:8000')}/webhook",
                     "method": "POST",
                     "streaming": True,
                     "custom_headers": {"conversation-id": conversation_id},
@@ -266,7 +266,9 @@ async def start(req: StartRequest):
         headers = {"Authorization": f"Bearer {os.getenv('DAILY_API_KEY')}"}
         response_data = {}
         r = await session.post(
-            "http://localhost:7860", headers=headers, json=bot_config
+            os.getenv("BOT_START_URL", "https://api.daily.co/v1/bots/start"),
+            headers=headers,
+            json=bot_config,
         )
         if r.status != 200:
             text = await r.text()
@@ -317,7 +319,7 @@ def homepage():
     return {"hello": "world"}
 
 
-@modal_app.function(image=image)
+@modal_app.function(image=image, secrets=[modal.Secret.from_name("my-custom-secret")])
 @modal.asgi_app()
 def fastapi_app():
     return app
