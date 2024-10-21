@@ -2,45 +2,34 @@ from statemachine import State, StateMachine
 
 
 class CallTree(StateMachine):
-    def __init__(self, name, school):
-        self._name = name
-        self._school = school
+    def __init__(self, patient_name, office_name, surgery, documents):
+        self._patient_name = patient_name
+        self._office_name = office_name
+        self._surgery = surgery
+        self._documents = documents
         self.messages = []
         super().__init__()
 
     def disposition(self, message):
         print(f"!!! DISPOSITION: {message}")
 
-    page_1 = State(initial=True)
-    page_2 = State()
-    page_3 = State()
-    page_4 = State()
-    page_7 = State()
-    page_8 = State()
-    page_11 = State()
-    page_17 = State()
-    page_26 = State()
+    node_1 = State(initial=True)
+    node_2 = State()
+    node_3 = State()
+    node_4 = State()
+    node_5 = State()
+    node_6 = State()
 
-    correct_person = page_1.to(page_2)
-    not_available_now = page_1.to(page_8)
-    wrong_number = page_1.to(page_11)
-    why_calling = page_1.to(page_17)
-
-    did_enrollment = page_2.to(page_7)
-    no_enrollment_yet = page_2.to(page_3)
-
-    yes_to_transfer = page_3.to(page_4)
-    no_to_transfer = page_3.to(page_26)
+    wrong_number = node_1.to(node_2)
+    confirmed_office = node_1.to(node_3)
+    human_followup = node_3.to(node_4) | node_5.to(node_4)
+    correct_person = node_3.to(node_5)
+    expected_documents = node_5.to(node_6)
 
     def on_exit_state(self, event, state):
         self.messages = []
 
-    def on_enter(self, state):
-        print(f"@@@ Entered {state}")
-
-    def on_enter_page_2(self):
-        # This page doesn't actually disposition but I needed to demo it
-        self.disposition("confirmed identity")
+    def on_enter_node_1(self):
         self.messages = [
             {
                 "action": {
@@ -52,7 +41,11 @@ class CallTree(StateMachine):
                             "value": [
                                 {
                                     "role": "system",
-                                    "content": "Now that you've confirmed you're speaking to the correct person. You need to determine if they have already completed the online enrollment process. If they have, call the did_enrollment function. If they haven't and they are a new prospect, call the no_enrollment_yet function.",
+                                    "content": f"""TASK: 
+                                    Today, you are tasked with calling the office of {self._office_name} to confirm or collect specific medical information about their patient {self._name} scheduled for {self._surgery}. 
+                                    
+                                    Start by confirming you are speaking to the correct office. If this is {self._office_name}, call the 'confirmed_office' function. If it's not, call the 'wrong_number' function.
+                                    """,
                                 }
                             ],
                         },
@@ -71,34 +64,34 @@ class CallTree(StateMachine):
                                 {
                                     "type": "function",
                                     "function": {
-                                        "name": "did_enrollment",
-                                        "description": "Call this function when the user confirms they've completed the online enrollment process.",
+                                        "name": "confirmed_office",
+                                        "description": f"Call this function when the user confirms they're with {self._office_name}.",
                                         "parameters": {
                                             "type": "object",
                                             "properties": {
-                                                "name": {
+                                                "office": {
                                                     "type": "string",
-                                                    "description": "The name of the person you're speaking with.",
+                                                    "description": "The name of the office you're calling.",
                                                 },
                                             },
-                                            "required": ["name"],
+                                            "required": ["office"],
                                         },
                                     },
                                 },
                                 {
                                     "type": "function",
                                     "function": {
-                                        "name": "no_enrollment_yet",
-                                        "description": "Call this function when the user says that they haven't completed the online enrollment process yet.",
+                                        "name": "wrong_number",
+                                        "description": "Call this function if the user says you've called the wrong number.",
                                         "parameters": {
                                             "type": "object",
                                             "properties": {
-                                                "name": {
+                                                "office": {
                                                     "type": "string",
-                                                    "description": "The name of the person you're speaking with.",
+                                                    "description": "The name of the office you're calling.",
                                                 },
                                             },
-                                            "required": ["name"],
+                                            "required": ["office"],
                                         },
                                     },
                                 },
@@ -115,7 +108,7 @@ class CallTree(StateMachine):
                     "arguments": [
                         {
                             "name": "text",
-                            "value": f"Hi {self._name}, this is Jackie from {self._school} and you can opt out of this and future calls at any time. This call is recorded and I'm calling about your interest in the School Program. Have you already completed the online enrollment process?",
+                            "value": f"Hello, this is Kate calling from Tri-County Health Services. Is this {self._office_name}?",
                         },
                         {"name": "save", "value": True},
                         {"name": "interrupt", "value": False},
@@ -124,8 +117,50 @@ class CallTree(StateMachine):
             },
         ]
 
-    def on_enter_page_3(self):
+    def on_enter_node_2(self):
         self.messages = [
+            {
+                "action": {
+                    "service": "tts",
+                    "action": "say",
+                    "arguments": [
+                        {
+                            "name": "text",
+                            "value": "Sorry for the trouble. Have a nice day!",
+                        },
+                        {"name": "save", "value": True},
+                        {"name": "interrupt", "value": False},
+                    ],
+                }
+            },
+        ]
+        print("WRONG NUMBER")
+
+    def on_enter_node_3(self):
+        self.messages = [
+            {
+                "action": {
+                    "service": "llm",
+                    "action": "append_to_messages",
+                    "arguments": [
+                        {
+                            "name": "messages",
+                            "value": [
+                                {
+                                    "role": "system",
+                                    "content": f"""Now that you've confirmed you're speaking to the right office, you need to collect the following medical records:
+                                    
+                                    {'; '.join(self._documents)}
+                                    
+                                    If the person you're speaking to can help provide the documents, call the correct_person function. If they say you need to speak to someone else, wait for them to transfer you, confirm the person you're speaking to can help, and then call the correct_person function. If they tell you they can't help, call the human_followup function.
+                                    """,
+                                }
+                            ],
+                        },
+                        {"name": "run_immediately", "value": False},
+                    ],
+                }
+            },
             {
                 "action": {
                     "service": "llm",
@@ -137,34 +172,34 @@ class CallTree(StateMachine):
                                 {
                                     "type": "function",
                                     "function": {
-                                        "name": "yes_to_transfer",
-                                        "description": "Call this function if the user agrees to be transferred to an admissions specialist.",
+                                        "name": "correct_person",
+                                        "description": "Call this function when you've confirmed that you're speaking with someone who can provide the requested medical records.",
                                         "parameters": {
                                             "type": "object",
                                             "properties": {
-                                                "name": {
+                                                "office": {
                                                     "type": "string",
-                                                    "description": "The name of the person you're speaking with.",
+                                                    "description": "The name of the office you're calling.",
                                                 },
                                             },
-                                            "required": ["name"],
+                                            "required": ["office"],
                                         },
                                     },
                                 },
                                 {
                                     "type": "function",
                                     "function": {
-                                        "name": "no_to_transfer",
-                                        "description": "Call this function if the user does not want to speak to an admissions specialist.",
+                                        "name": "human_followup",
+                                        "description": "Call this function if the user says they are unable to help with your request for medical records.",
                                         "parameters": {
                                             "type": "object",
                                             "properties": {
-                                                "name": {
+                                                "office": {
                                                     "type": "string",
-                                                    "description": "The name of the person you're speaking with.",
+                                                    "description": "The name of the office you're calling.",
                                                 },
                                             },
-                                            "required": ["name"],
+                                            "required": ["office"],
                                         },
                                     },
                                 },
@@ -181,7 +216,7 @@ class CallTree(StateMachine):
                     "arguments": [
                         {
                             "name": "text",
-                            "value": "I would like to transfer you to an Admissions Specialist who can give you some more information about the program and answer any questions you might have. May I do this for you now?",
+                            "value": f"I’m a digital assistant calling from Tri-County Medical Services regarding {self._patient_name}, who is scheduled for {self._surgery}. Our office needs some help with some of their medical records. Are you able to assist with that?",
                         },
                         {"name": "save", "value": True},
                         {"name": "interrupt", "value": False},
@@ -190,8 +225,7 @@ class CallTree(StateMachine):
             },
         ]
 
-    def on_enter_page_11(self):
-        self.disposition("confirmed identity")
+    def on_enter_node_4(self):
         self.messages = [
             {
                 "action": {
@@ -200,7 +234,104 @@ class CallTree(StateMachine):
                     "arguments": [
                         {
                             "name": "text",
-                            "value": "Sorry to bother you. Have a great day. Goodbye!",
+                            "value": "I understand, thank you for checking. We will have someone from our team follow up with you shortly.",
+                        },
+                        {"name": "save", "value": True},
+                        {"name": "interrupt", "value": False},
+                    ],
+                }
+            },
+        ]
+        print("CAN'T HELP")
+
+    def on_enter_node_5(self):
+        self.messages = [
+            {
+                "action": {
+                    "service": "llm",
+                    "action": "append_to_messages",
+                    "arguments": [
+                        {
+                            "name": "messages",
+                            "value": [
+                                {
+                                    "role": "system",
+                                    "content": f"""TASK: 
+                                    Now that you've confirmed you're speaking to the right person to help, you need to collect the following medical records:
+                                    
+                                    {'; '.join(self._documents)}
+                                    
+                                    The user can provide the records by email or fax. They can email PDFs to documents@tricountymed.com, or they can fax them to 480-348-3345. You should try to get the documents today if you can, but you can wait up to a week if necessary.
+                                    
+                                    Ask the user how they'd like to send the records, and when they think they'll be able to send them. When you have a method and date, call the expected_documents function. If you're unable to complete the task, call the human_followup function.
+                                    """,
+                                }
+                            ],
+                        },
+                        {"name": "run_immediately", "value": True},
+                    ],
+                }
+            },
+            {
+                "action": {
+                    "service": "llm",
+                    "action": "set_context",
+                    "arguments": [
+                        {
+                            "name": "tools",
+                            "value": [
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": "expected_documents",
+                                        "description": "Call this function when you've verified that the user has all the documents you need, and they've told you how and when they are able to send them to you.",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "method": {
+                                                    "type": "string",
+                                                    "description": "How the user plans to send you the documents, such as 'email' or 'fax'.",
+                                                },
+                                                "date": {
+                                                    "type": "string",
+                                                    "description": "The expected date you will receive the documents in YYYY-MM-DD format.",
+                                                },
+                                            },
+                                            "required": ["method", "date"],
+                                        },
+                                    },
+                                },
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": "human_followup",
+                                        "description": "Call this function if the user says they are unable to help with your request for medical records.",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "office": {
+                                                    "type": "string",
+                                                    "description": "The name of the office you're calling.",
+                                                },
+                                            },
+                                            "required": ["office"],
+                                        },
+                                    },
+                                },
+                            ],
+                        },
+                        {"name": "run_immediately", "value": False},
+                    ],
+                }
+            },
+            {
+                "action": {
+                    "service": "tts",
+                    "action": "say",
+                    "arguments": [
+                        {
+                            "name": "text",
+                            "value": f"I’m a digital assistant calling from Tri-County Medical Services regarding {self._patient_name}, who is scheduled for {self._surgery}. Our office needs some help with some of their medical records. Are you able to assist with that?",
                         },
                         {"name": "save", "value": True},
                         {"name": "interrupt", "value": False},
@@ -209,8 +340,7 @@ class CallTree(StateMachine):
             },
         ]
 
-    def on_enter_page_26(self):
-        self.disposition("Customer interested but refused warm transfer")
+    def on_enter_node_6(self):
         self.messages = [
             {
                 "action": {
@@ -219,7 +349,7 @@ class CallTree(StateMachine):
                     "arguments": [
                         {
                             "name": "text",
-                            "value": "That's okay. Thank you for your time. Have a nice day. Goodbye!",
+                            "value": "It looks like I have everything I need. Thanks for your help!",
                         },
                         {"name": "save", "value": True},
                         {"name": "interrupt", "value": False},
@@ -227,3 +357,4 @@ class CallTree(StateMachine):
                 }
             },
         ]
+        print("CAN'T HELP")

@@ -1,11 +1,10 @@
 import json
 import os
 import uuid
-from typing import Annotated, Optional
+from typing import Annotated
 
 import aiohttp
 import modal
-import pytz
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header
 from pydantic import BaseModel
@@ -140,7 +139,7 @@ async def start(req: StartRequest):
 
     async with aiohttp.ClientSession() as session:
         conversation_id = str(uuid.uuid4())
-        run_on_config = True
+        run_on_config = False
         if req.dialout:
             run_on_config = False
         bot_config = {
@@ -188,66 +187,22 @@ async def start(req: StartRequest):
                                     "content": [
                                         {
                                             "type": "text",
-                                            "text": "You are Jackie, an agent for Bob's Barber Academy. You are calling to speak with Chad Bailey. Your responses are being converted to speech, so avoid special characters and markup. Begin by introducing yourself and confirming you're speaking with Chad. If you've confirmed you're speaking with Chad, call the correct_person function. If Chad isn't available, call the not_available_now function. If you've called the wrong number, call the wrong_number function. If someone asks why you're calling, tell them we received an request for more information about Bob's Barber Academy from an online form filled out by Chad.",
+                                            "text": """Conversational Style:
+                                            
+                                            Make sure to ONLY ASK ONE QUESTION at a time to not overwhelm the user and KEEP YOUR questions SHORT. Your communication style should be proactive and lead the conversation, asking targeted questions. Ensure your responses are concise, clear, and maintain a conversational tone. If the user only partially answers a question, RE-ASK the part that they forgot to answer.
+                                            
+                                            Approach the conversation with a professional and courteous tone and be friendly with them.
+                                            
+                                            Ask for information in a clear and concise manner, ensuring not to overwhelm the office staff.
+                                            
+                                            Be patient and give the person on the other end time to respond to your requests.
+                                            
+                                            If the office staff needs time to locate the information, offer to hold or suggest a callback time.
+                                            
+                                            If the office cannot find the patient or encounters any issues, apologize and inform them that someone from the hospital will follow up.""",
                                         }
                                     ],
                                 }
-                            ],
-                        },
-                        {
-                            "name": "tools",
-                            "value": [
-                                {
-                                    "type": "function",
-                                    "function": {
-                                        "name": "correct_person",
-                                        "description": "Call this function when you've verified that you're speaking to the correct person.",
-                                        "parameters": {
-                                            "type": "object",
-                                            "properties": {
-                                                "name": {
-                                                    "type": "string",
-                                                    "description": "The name of the person you're speaking with.",
-                                                },
-                                            },
-                                            "required": ["name"],
-                                        },
-                                    },
-                                },
-                                {
-                                    "type": "function",
-                                    "function": {
-                                        "name": "not_available_now",
-                                        "description": "Call this function if the person you're trying to reach isn't available to speak right now.",
-                                        "parameters": {
-                                            "type": "object",
-                                            "properties": {
-                                                "name": {
-                                                    "type": "string",
-                                                    "description": "The name of the person you're trying to speak with.",
-                                                },
-                                            },
-                                            "required": ["name"],
-                                        },
-                                    },
-                                },
-                                {
-                                    "type": "function",
-                                    "function": {
-                                        "name": "wrong_number",
-                                        "description": "Call this function if the person you're talking to says you've called the wrong number.",
-                                        "parameters": {
-                                            "type": "object",
-                                            "properties": {
-                                                "name": {
-                                                    "type": "string",
-                                                    "description": "The name of the person you're trying to speak with.",
-                                                },
-                                            },
-                                            "required": ["name"],
-                                        },
-                                    },
-                                },
                             ],
                         },
                         {"name": "run_on_config", "value": run_on_config},
@@ -255,7 +210,15 @@ async def start(req: StartRequest):
                 },
             ],
         }
-        call_trees[conversation_id] = CallTree("Chad Bailey", "Bob's Barber Academy")
+        call_trees[conversation_id] = CallTree(
+            patient_name="Alice Adams",
+            office_name="Dr. Carlson's office",
+            surgery="knee replacement",
+            documents=[
+                "Knee X-ray taken on October 8",
+                "Lab tests performed on October 10",
+            ],
+        )
         if req.callId:
             bot_config["dialin_settings"] = {
                 "callId": req.callId,
