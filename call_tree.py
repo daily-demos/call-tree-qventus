@@ -239,20 +239,6 @@ class CallTree(StateMachine):
                     ],
                 }
             },
-            {
-                "action": {
-                    "service": "tts",
-                    "action": "say",
-                    "arguments": [
-                        {
-                            "name": "text",
-                            "value": f"I’m a digital assistant calling from Tri-County Medical Services regarding {self._patient_name}, who is scheduled for {self._surgery}. Our office needs some help with some of their medical records. Are you able to assist with that?",
-                        },
-                        {"name": "save", "value": True},
-                        {"name": "interrupt", "value": False},
-                    ],
-                }
-            },
         ]
 
     def on_enter_node_6(self):
