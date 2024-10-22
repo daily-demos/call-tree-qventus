@@ -18,8 +18,8 @@ To run this yourself:
 2. Clone this repo, set up a venv, and populate a .env file:
 
 ```
-git clone git@github.com:daily-co/daily-bots-phone-tree.git
-cd daily-bots-phone-tree
+git clone git@github.com:daily-co/daily-bots-qventus.git
+cd daily-bots-qventus
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
