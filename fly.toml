@@ -3,7 +3,7 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'daily-bots-phone-tree'
+app = 'daily-bots-qventus'
 primary_region = 'dfw'
 
 [build]

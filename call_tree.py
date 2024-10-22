@@ -30,92 +30,7 @@ class CallTree(StateMachine):
         self.messages = []
 
     def on_enter_node_1(self):
-        self.messages = [
-            {
-                "action": {
-                    "service": "llm",
-                    "action": "append_to_messages",
-                    "arguments": [
-                        {
-                            "name": "messages",
-                            "value": [
-                                {
-                                    "role": "system",
-                                    "content": f"""TASK: 
-                                    Today, you are tasked with calling the office of {self._office_name} to confirm or collect specific medical information about their patient {self._name} scheduled for {self._surgery}. 
-                                    
-                                    Start by confirming you are speaking to the correct office. If this is {self._office_name}, call the 'confirmed_office' function. If it's not, call the 'wrong_number' function.
-                                    """,
-                                }
-                            ],
-                        },
-                        {"name": "run_immediately", "value": False},
-                    ],
-                }
-            },
-            {
-                "action": {
-                    "service": "llm",
-                    "action": "set_context",
-                    "arguments": [
-                        {
-                            "name": "tools",
-                            "value": [
-                                {
-                                    "type": "function",
-                                    "function": {
-                                        "name": "confirmed_office",
-                                        "description": f"Call this function when the user confirms they're with {self._office_name}.",
-                                        "parameters": {
-                                            "type": "object",
-                                            "properties": {
-                                                "office": {
-                                                    "type": "string",
-                                                    "description": "The name of the office you're calling.",
-                                                },
-                                            },
-                                            "required": ["office"],
-                                        },
-                                    },
-                                },
-                                {
-                                    "type": "function",
-                                    "function": {
-                                        "name": "wrong_number",
-                                        "description": "Call this function if the user says you've called the wrong number.",
-                                        "parameters": {
-                                            "type": "object",
-                                            "properties": {
-                                                "office": {
-                                                    "type": "string",
-                                                    "description": "The name of the office you're calling.",
-                                                },
-                                            },
-                                            "required": ["office"],
-                                        },
-                                    },
-                                },
-                            ],
-                        },
-                        {"name": "run_immediately", "value": False},
-                    ],
-                }
-            },
-            {
-                "action": {
-                    "service": "tts",
-                    "action": "say",
-                    "arguments": [
-                        {
-                            "name": "text",
-                            "value": f"Hello, this is Kate calling from Tri-County Health Services. Is this {self._office_name}?",
-                        },
-                        {"name": "save", "value": True},
-                        {"name": "interrupt", "value": False},
-                    ],
-                }
-            },
-        ]
+        print("!!! Entering node 1")
 
     def on_enter_node_2(self):
         self.messages = [
@@ -349,7 +264,7 @@ class CallTree(StateMachine):
                     "arguments": [
                         {
                             "name": "text",
-                            "value": "It looks like I have everything I need. Thanks for your help!",
+                            "value": "It looks like I have everything I need. Thanks for your help! Goodbye!",
                         },
                         {"name": "save", "value": True},
                         {"name": "interrupt", "value": False},

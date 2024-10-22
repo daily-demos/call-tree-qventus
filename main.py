@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Header
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 
 from call_tree import CallTree
 
@@ -40,7 +42,17 @@ class LanguageRequest(BaseModel):
     language: str
 
 
-app = FastAPI()
+app = FastAPI(
+    middleware=[
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    ]
+)
 load_dotenv(override=True)
 
 languages = {
@@ -139,7 +151,7 @@ async def start(req: StartRequest):
 
     async with aiohttp.ClientSession() as session:
         conversation_id = str(uuid.uuid4())
-        run_on_config = False
+        run_on_config = True
         if req.dialout:
             run_on_config = False
         bot_config = {
@@ -199,10 +211,54 @@ async def start(req: StartRequest):
                                             
                                             If the office staff needs time to locate the information, offer to hold or suggest a callback time.
                                             
-                                            If the office cannot find the patient or encounters any issues, apologize and inform them that someone from the hospital will follow up.""",
+                                            If the office cannot find the patient or encounters any issues, apologize and inform them that someone from the hospital will follow up.
+                                            
+                                            TASK: 
+                                            Today, you are tasked with calling Dr. Carlson's office to collect specific medical information about their patient Alice Adams scheduled for knee replacement surgery. 
+                                            
+                                            Start by confirming you are speaking to the correct office. If this is Dr. Carlson's office, call the 'confirmed_office' function. If it's not, call the 'wrong_number' function.""",
                                         }
                                     ],
                                 }
+                            ],
+                        },
+                        {
+                            "name": "tools",
+                            "value": [
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": "confirmed_office",
+                                        "description": "Call this function when the user confirms they're with Dr. Carlson's office.",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "office": {
+                                                    "type": "string",
+                                                    "description": "The name of the office you're calling.",
+                                                },
+                                            },
+                                            "required": ["office"],
+                                        },
+                                    },
+                                },
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": "wrong_number",
+                                        "description": "Call this function if the user says you've called the wrong number.",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "office": {
+                                                    "type": "string",
+                                                    "description": "The name of the office you're calling.",
+                                                },
+                                            },
+                                            "required": ["office"],
+                                        },
+                                    },
+                                },
                             ],
                         },
                         {"name": "run_on_config", "value": run_on_config},
@@ -262,10 +318,7 @@ async def webhook(
 
     print(f"!!! got a webhook function call: {req}, conversation_id: {conversation_id}")
     ct = call_trees[conversation_id]
-    # we'll eventually dispatch the actual webhook function_name to the state machine.
-    # For now, this cycle() function moves from page 1 to page 2, but the state machine
-    # events don't return anything, so we have to store our desired messages in an
-    # instance var in the state machine.
+
     ct.send(req.function_name)
 
     print(f"!!! machine state: {ct.current_state.name}")
